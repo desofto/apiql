@@ -117,7 +117,11 @@ class APIQL
         params = context.parse_params(reg[:params])
 
         data = public_send(function, *params)
-        unless APIQL::simple_class?(data)
+        if data.is_a? Array
+          if data.any? { |item| !APIQL::simple_class?(item) }
+            data = nil
+          end
+        elsif !APIQL::simple_class?(data)
           data = nil
         end
 
