@@ -21,7 +21,6 @@ class APIQL
 
       if request.present?
         redis&.set("api-ql-cache-#{request_id}", request)
-        @@cache = {} if @@cache.count > 1000
         @@cache[request_id] = request
       else
         request = @@cache[request_id]
@@ -264,7 +263,7 @@ class APIQL
         HashEntity.new(value, self).render(schema)
       elsif value.respond_to?(:each) && value.respond_to?(:map)
         value.map do |object|
-          "#{object.class.name}::Entity".constantize.new(object, self).render(schema)
+          render_value(object, schema)
         end
       elsif APIQL::simple_class?(value)
         value
