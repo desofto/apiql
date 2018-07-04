@@ -9,7 +9,7 @@ class UserAPIQL < ::APIQL
   def me
     authorize! :show, ::User
 
-    context.current_user
+    current_user
   end
 
   def authenticate(email, password)
@@ -20,7 +20,7 @@ class UserAPIQL < ::APIQL
   end
 
   def logout
-    context.current_user&.logout
+    current_user&.logout
 
     :ok
   end
@@ -46,7 +46,7 @@ class User < ApplicationRecord
     attributes :full_name, :email, :token, :role, :roles
 
     def token
-      object.token if object == context.current_user
+      object.token if object == current_user
     end
   end
 
@@ -102,7 +102,7 @@ config/initializers/apiql.rb:
 
 ```ruby
 class APIQL
-  delegate :authorize!, to: :context
+  delegate :authorize!, to: :@context
 
   class Context
     def authorize!(*args)

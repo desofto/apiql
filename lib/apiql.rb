@@ -53,6 +53,7 @@ class APIQL
 
   def initialize(binder, *fields)
     @context = ::APIQL::Context.new(binder, *fields)
+    @context.inject_delegators(self)
   end
 
   def render(schema)
@@ -79,7 +80,7 @@ class APIQL
         keys, last_key = pool.pop
 
         if pool.empty?
-          result[function] = context.render_value(data, last_keys)
+          result[function] = @context.render_value(data, last_keys)
           function = nil
         else
           keys.delete(last_key)
@@ -99,7 +100,7 @@ class APIQL
         schema = reg[:rest]
 
         function = reg[:name]
-        params = context.parse_params(reg[:params])
+        params = @context.parse_params(reg[:params])
 
         data = public_send(function, *params)
 
@@ -114,7 +115,7 @@ class APIQL
         schema = reg[:rest]
 
         function = reg[:name]
-        params = context.parse_params(reg[:params])
+        params = @context.parse_params(reg[:params])
 
         data = public_send(function, *params)
         if data.is_a? Array
@@ -158,11 +159,12 @@ class APIQL
       end
     end
 
-    attr_reader :object, :context
+    attr_reader :object
 
     def initialize(object, context)
       @object = object
       @context = context
+      @context.inject_delegators(self)
     end
 
     def render(schema = nil)
@@ -190,7 +192,7 @@ class APIQL
     def get_field(field)
       if field.is_a? Array
         field, params = field
-        params = context.parse_params(params)
+        params = @context.parse_params(params)
       end
       return unless field.to_sym.in? self.class.apiql_attributes
 
@@ -225,7 +227,7 @@ class APIQL
 
     def render_value(value, schema = nil)
       if schema.present?
-        context.render_value(value, schema)
+        @context.render_value(value, schema)
       else
         value
       end
@@ -240,10 +242,19 @@ class APIQL
 
   class Context
     def initialize(binder, *fields)
+      @fields = fields
       fields.each do |field|
         instance_variable_set("@#{field}", binder.send(field))
         class_eval do
           attr_accessor field
+        end
+      end
+    end
+
+    def inject_delegators(target)
+      @fields.each do |field|
+        target.class_eval do
+          delegate field, to: :@context
         end
       end
     end
