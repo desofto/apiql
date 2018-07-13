@@ -1,7 +1,6 @@
-class APIQL {
-  constructor(endpoint) {
-    this.endpoint = endpoint
-  }
+const APIQL = {
+  on_error: null,
+  endpoint: '',
 
   hash(s) {
     let hash = 0, i, chr
@@ -12,9 +11,9 @@ class APIQL {
       hash |= 0
     }
     return hash
-  }
+  },
 
-  call(schema, params = {}, form = null) {
+  call(endpoint, schema, params = {}, form = null) {
     return new Promise((resolve, reject) => {
       if(params instanceof FormData) {
         form = params
@@ -33,13 +32,14 @@ class APIQL {
         params.apiql = this.hash(schema)
       }
 
-      Vue.http.post(`${APIQL.endpoint}${this.endpoint}`, params)
+      Vue.http.post(`${APIQL.endpoint}${endpoint}`, params)
       .then(response => {
         resolve(response.body)
       })
       .catch(response => {
-        if(response.status == 401 && APIQL.unauthenticated) {
-          APIQL.unauthenticated()
+        if(response.status == 401 && APIQL.on_error) {
+          APIQL.on_error(response)
+          return
         }
 
         if(form) {
@@ -48,17 +48,22 @@ class APIQL {
           params.apiql_request = schema
         }
 
-        Vue.http.post(`${APIQL.endpoint}${this.endpoint}`, form || params)
+        Vue.http.post(`${APIQL.endpoint}${endpoint}`, form || params)
         .then(response => {
           resolve(response.body)
         })
         .catch(response => {
-          alert(response.body.errors)
+          if(APIQL.on_error) {
+            APIQL.on_error(response)
+          } else {
+            alert(response.body)
+          }
         })
       })
     })
   }
 }
 
-APIQL.unauthenticated = null
-APIQL.endpoint = ''
+function apiql(endpoint, schema, params = {}, form = null) {
+  return APIQL.call(endpoint, schema, params, form)
+}

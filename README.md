@@ -36,17 +36,17 @@ def user
 end
 
 ```
-variables `session`, `current_user` and `params` will be stored into context you can use in presenters and handlers
+variables `session`, `current_user` and `params` (you can list any you need) will be stored into context you can use in presenters and handlers
 
 Define presenters for your models:
 
 ```ruby
 class User < ApplicationRecord
   class Entity < ::APIQL::Entity
-    attributes :full_name, :email, :token, :role, :roles
+    attributes :full_name, :email, :token, :role, :roles # any attributes, methods or associations
 
-    def token
-      object.token if object == current_user
+    def token # if defined, method will be called instead of attribute
+      object.token if object == current_user # directly access to current_user from context
     end
   end
 
@@ -66,28 +66,34 @@ APIQL.endpoint = "/"
 ```
 
 ```javascript
+// function apiql(endpoint, schema, params = {}, form = null) -- schema is cached, so entire request is passed only for first time, later - short hashes only
+
 authenticate(email, password) {
-  let api = new APIQL("user")
-  api.call(`
+  apiql("user", `
     logout()
-    authenticate(email,password) {
+
+    authenticate(email, password) {
       token
     }
+
     me {
       email full_name role token
+
+      roles {
+        id title
+      }
    }
   `, {
-    email: email,
+    email: email, // these var will be passed into methods on the server side
     password: password
   })
-  .then(response => {
+  .then(response => { // response contains results of called methods
     let user = response.me
   })
 }
 
 logout() {
-  let api = new APIQL("user")
-  api.call(`
+  apiql("user", `
     logout
   `)
   .then(response => {
