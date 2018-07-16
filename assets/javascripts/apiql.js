@@ -32,7 +32,7 @@ const APIQL = {
         params.apiql = this.hash(schema)
       }
 
-      Vue.http.post(`${APIQL.endpoint}${endpoint}`, params)
+      Vue.http.post(`${APIQL.endpoint}${endpoint}`, form || params)
       .then(response => {
         resolve(response.body)
       })

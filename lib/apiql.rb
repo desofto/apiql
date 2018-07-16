@@ -312,7 +312,15 @@ class APIQL
       elsif APIQL::simple_class?(value)
         value
       else
-        "#{value.class.name}::Entity".constantize.new(value, self).render(schema)
+        begin
+          "#{value.class.name}::Entity".constantize.new(value, self).render(schema)
+        rescue StandardError
+          if ::Rails.env.development?
+            raise
+          else
+            nil
+          end
+        end
       end
     end
   end

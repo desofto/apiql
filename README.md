@@ -102,6 +102,37 @@ logout() {
 
 ```
 
+you can call methods on entities:
+
+```javascript
+  apiql("user", `
+    authenticate(email, password) {
+      token
+    }
+
+    me.reload {
+      email full_name role token
+
+      roles(filter) {
+        id title
+      }
+
+      contacts.primary {
+        full_name
+        email
+      }
+   }
+  `, {
+    email: email,
+    filter: 'all',
+    password: password
+  })
+  .then(response => {
+    let user = response['me.reload'] // name in response equals to called
+  })
+}
+```
+
 You can use initializer like this for authorization using cancancan gem:
 
 config/initializers/apiql.rb:
@@ -109,6 +140,10 @@ config/initializers/apiql.rb:
 ```ruby
 class APIQL
   delegate :authorize!, to: :@context
+
+  class Entity
+    delegate :authorize!, to: :@context
+  end
 
   class Context
     def authorize!(*args)
@@ -122,4 +157,24 @@ class APIQL
     end
   end
 end
+```
+
+and even authorize access to every entity:
+
+```ruby
+class ApplicationRecord < ActiveRecord::Base
+  class BaseEntity < APIQL::Entity
+    def initialize(object, context)
+      context.authorize! :read, object
+      super(object, context)
+    end
+  end
+end
+
+class User < ApplicationRecord
+  class Entity < BaseEntity
+    ...
+  end
+end
+
 ```
