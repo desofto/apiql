@@ -86,7 +86,7 @@ class APIQL
           keys.delete(last_key)
           keys << { last_key => last_keys }
         end
-      elsif function.present? && (reg = schema.match(/\A\s*(?<name>\w+)(\((?<params>.*)\))?(?<rest>.*)\z/m))
+      elsif function.present? && (reg = schema.match(/\A\s*(?<name>[\w\.]+)(\((?<params>.*)\))?(?<rest>.*)\z/m))
         schema = reg[:rest]
 
         if reg[:params].present?
@@ -96,7 +96,7 @@ class APIQL
         end
 
         last_key = reg[:name]
-      elsif reg = schema.match(/\A\s*(?<name>\w+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\{(?<rest>.*)\z/m)
+      elsif reg = schema.match(/\A\s*(?<name>[\w\.]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\{(?<rest>.*)\z/m)
         schema = reg[:rest]
 
         function = reg[:name]
@@ -111,7 +111,7 @@ class APIQL
 
         pool.push [keys, last_key]
         keys = []
-      elsif reg = schema.match(/\A\s*(?<name>\w+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\n(?<rest>.*)\z/m)
+      elsif reg = schema.match(/\A\s*(?<name>[\w\.]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\n?(?<rest>.*)\z/m)
         schema = reg[:rest]
 
         function = reg[:name]
@@ -194,12 +194,41 @@ class APIQL
         field, params = field
         params = @context.parse_params(params)
       end
-      return unless field.to_sym.in? self.class.apiql_attributes
 
-      if respond_to? field
-        public_send(field, *params)
+      names = field.split('.')
+      if names.count > 1
+        o = nil
+
+        names.each do |field|
+          if o.present?
+            if o.respond_to? field
+              o = o.public_send(field, *params)
+            else
+              o = nil
+              break
+            end
+          else
+            return unless field.to_sym.in? self.class.apiql_attributes
+
+            if respond_to? field
+              o = public_send(field, *params)
+            else
+              o = object.public_send(field, *params)
+            end
+
+            break unless o.present?
+          end
+        end
+
+        o
       else
-        object.public_send(field, *params)
+        return unless field.to_sym.in? self.class.apiql_attributes
+
+        if respond_to? field
+          public_send(field, *params)
+        else
+          object.public_send(field, *params)
+        end
       end
     end
 
@@ -261,7 +290,7 @@ class APIQL
 
     def parse_params(list)
       list&.split(',')&.map(&:strip)&.map do |name|
-        if reg = name.match(/\A[a-zA-Z]\w*\z/)
+        if reg = name.match(/\A[a-zA-Z_]\w*\z/)
           params[name]
         else
           begin

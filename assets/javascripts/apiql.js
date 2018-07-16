@@ -42,6 +42,8 @@ const APIQL = {
           return
         }
 
+        if(response.status < 400) return
+
         if(form) {
           form.append('apiql_request', schema)
         } else {
