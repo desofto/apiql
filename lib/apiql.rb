@@ -67,7 +67,7 @@ class APIQL
           schema = reg[:rest]
 
           ptr = pool.pop
-        elsif pool.any? && (reg = schema.match(/\A\s*(?<name>[\w\.]+)(\((?<params>.*)\))?(?<rest>.*)\z/m))
+        elsif pool.any? && (reg = schema.match(/\A\s*(?<name>[\w\.]+)(\((?<params>.*?)\))?(?<rest>.*)\z/m))
           schema = reg[:rest]
 
           if reg[:params].nil?
@@ -114,11 +114,11 @@ class APIQL
     schema.map do |call|
       if call.is_a? ::Hash
         call.each do |function, sub_schema|
-          reg = function.match(/\A(?<name>[\w\.]+)(\((?<params>.*)\))?\z/)
+          reg = function.match(/\A(?<name>[\w\.]+)(\((?<params>.*?)\))?\z/)
           raise Error, function unless reg.present?
 
           function = reg[:name]
-          params = @context.parse_params(reg[:params])
+          params = @context.parse_params(reg[:params].presence)
 
           @eager_load = eager_loads(sub_schema)
           data = public_send(function, *params)
@@ -133,11 +133,11 @@ class APIQL
           result[function] = @context.render_value(data, sub_schema)
         end
       else
-        reg = call.match(/\A(?<name>[\w\.]+)(\((?<params>.*)\))?\z/)
+        reg = call.match(/\A(?<name>[\w\.]+)(\((?<params>.*?)\))?\z/)
         raise Error, call unless reg.present?
 
         function = reg[:name]
-        params = @context.parse_params(reg[:params])
+        params = @context.parse_params(reg[:params].presence)
 
         @eager_load = ''
         data = public_send(function, *params)
@@ -218,12 +218,16 @@ class APIQL
       schema.each do |field|
         if field.is_a? Hash
           field.each do |field, sub_schema|
-            name = field.is_a?(Array) ? field.first : field
-            respond[name] = render_attribute(field, sub_schema)
+            reg = field.match(/\A(?<name>[\w\.]+)(\((?<params>.*?)\))?\z/)
+            raise Error, field unless reg.present?
+
+            respond[reg[:name]] = render_attribute(reg[:name], reg[:params].presence, sub_schema)
           end
         else
-          name = field.is_a?(Array) ? field.first : field
-          respond[name] = render_attribute(field)
+          reg = field.match(/\A(?<name>[\w\.]+)(\((?<params>.*?)\))?\z/)
+          raise Error, field unless reg.present?
+
+          respond[reg[:name]] = render_attribute(reg[:name], reg[:params].presence)
         end
       end
 
@@ -232,9 +236,8 @@ class APIQL
 
     private
 
-    def get_field(field)
-      if field.is_a? Array
-        field, params = field
+    def get_field(field, params = nil)
+      if params.present?
         params = @context.parse_params(params)
       end
 
@@ -275,8 +278,8 @@ class APIQL
       end
     end
 
-    def render_attribute(field, schema = nil)
-      data = get_field(field)
+    def render_attribute(field, params = nil, schema = nil)
+      data = get_field(field, params)
 
       if data.is_a?(Hash) && schema.present?
         respond = {}
@@ -307,7 +310,7 @@ class APIQL
   end
 
   class HashEntity < Entity
-    def get_field(field)
+    def get_field(field, params = nil)
       object[field.to_sym]
     end
   end
