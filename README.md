@@ -1,6 +1,10 @@
 # APIQL
 
-Implementation of the API language similar to GraphQL for Ruby on Rails
+Implementation of the API language similar to GraphQL for Ruby on Rails.
+
+It compiles requests into Hashes for faster rendering.
+
+Now, it automatically detects nested entities and eager-loads them for faster DB access!
 
 Define your responder (requested methods):
 

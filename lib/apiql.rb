@@ -24,8 +24,8 @@ class APIQL
         @@cache[request_id] = request
       else
         request = @@cache[request_id]
-        request ||= redis&.get("api-ql-cache-#{request_id}")
-        raise CacheMissed unless request.present?
+        request ||= JSON.parse(redis.get("api-ql-cache-#{request_id}")) rescue nil
+        raise CacheMissed unless request.present? && request.is_a?(::Array)
       end
 
       request
@@ -49,6 +49,50 @@ class APIQL
           nil
         end
     end
+
+    def compile(schema)
+      result = []
+
+      ptr = result
+      pool = []
+
+      while schema.present? do
+        if reg = schema.match(/\A\s*\{(?<rest>.*)\z/m) # {
+          schema = reg[:rest]
+
+          pool.push(ptr)
+          key = ptr.pop
+          ptr.push(key => (ptr = []))
+        elsif reg = schema.match(/\A\s*\}(?<rest>.*)\z/m) # }
+          schema = reg[:rest]
+
+          ptr = pool.pop
+        elsif pool.any? && (reg = schema.match(/\A\s*(?<name>[\w\.]+)(\((?<params>.*)\))?(?<rest>.*)\z/m))
+          schema = reg[:rest]
+
+          if reg[:params].nil?
+            key = reg[:name]
+          else
+            key = "#{reg[:name]}(#{reg[:params]})"
+          end
+
+          ptr.push(key)
+        elsif reg = schema.match(/\A\s*(?<name>[\w\.]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\{(?<rest>.*)\z/m)
+          schema = reg[:rest]
+
+          pool.push(ptr)
+          ptr.push("#{reg[:name]}(#{reg[:params]})" => (ptr = []))
+        elsif reg = schema.match(/\A\s*(?<name>[\w\.]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\n?(?<rest>.*)\z/m)
+          schema = reg[:rest]
+
+          ptr.push("#{reg[:name]}(#{reg[:params]})")
+        else
+          raise Error, schema
+        end
+      end
+
+      result
+    end
   end
 
   def initialize(binder, *fields)
@@ -56,67 +100,46 @@ class APIQL
     @context.inject_delegators(self)
   end
 
+  def eager_load
+    result = @eager_load
+
+    @eager_load = nil
+
+    result
+  end
+
   def render(schema)
     result = {}
 
-    function = nil
-    data = nil
+    schema.map do |call|
+      if call.is_a? ::Hash
+        call.each do |function, sub_schema|
+          reg = function.match(/\A(?<name>[\w\.]+)(\((?<params>.*)\))?\z/)
+          raise Error, function unless reg.present?
 
-    pool = nil
-    keys = nil
-    last_key = nil
+          function = reg[:name]
+          params = @context.parse_params(reg[:params])
 
-    while schema.present? do
-      if reg = schema.match(/\A\s*\{(?<rest>.*)\z/m) # {
-        schema = reg[:rest]
+          @eager_load = eager_loads(sub_schema)
+          data = public_send(function, *params)
+          if @eager_load.present? && !data.is_a?(::Hash)
+            if data.respond_to?(:each) && data.respond_to?(:map)
+              data = data.eager_load(eager_load)
+            elsif data.respond_to?(:id)
+              data = data.class.eager_load(eager_load).find(data.id)
+            end
+          end
 
-        pool.push [keys, last_key]
-        keys = []
-      elsif reg = schema.match(/\A\s*\}(?<rest>.*)\z/m) # }
-        schema = reg[:rest]
-
-        last_keys = keys
-
-        keys, last_key = pool.pop
-
-        if pool.empty?
-          result[function] = @context.render_value(data, last_keys)
-          function = nil
-        else
-          keys.delete(last_key)
-          keys << { last_key => last_keys }
+          result[function] = @context.render_value(data, sub_schema)
         end
-      elsif function.present? && (reg = schema.match(/\A\s*(?<name>[\w\.]+)(\((?<params>.*)\))?(?<rest>.*)\z/m))
-        schema = reg[:rest]
-
-        if reg[:params].present?
-          keys << [reg[:name], reg[:params]]
-        else
-          keys << reg[:name]
-        end
-
-        last_key = reg[:name]
-      elsif reg = schema.match(/\A\s*(?<name>[\w\.]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\{(?<rest>.*)\z/m)
-        schema = reg[:rest]
+      else
+        reg = call.match(/\A(?<name>[\w\.]+)(\((?<params>.*)\))?\z/)
+        raise Error, call unless reg.present?
 
         function = reg[:name]
         params = @context.parse_params(reg[:params])
 
-        data = public_send(function, *params)
-
-        pool = []
-        requested = {}
-
-        last_key = nil
-
-        pool.push [keys, last_key]
-        keys = []
-      elsif reg = schema.match(/\A\s*(?<name>[\w\.]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\n?(?<rest>.*)\z/m)
-        schema = reg[:rest]
-
-        function = reg[:name]
-        params = @context.parse_params(reg[:params])
-
+        @eager_load = ''
         data = public_send(function, *params)
         if data.is_a? Array
           if data.any? { |item| !APIQL::simple_class?(item) }
@@ -127,10 +150,30 @@ class APIQL
         end
 
         result[function] = data
+      end
+    end
 
-        function = nil
-      else
-        raise Error
+    result
+  end
+
+  private
+
+  def eager_loads(schema)
+    result = []
+
+    schema.each do |call|
+      if call.is_a? Hash
+        call.each do |function, sub_schema|
+          next if function.include? '('
+          function = function.split('.').first if function.include? '.'
+
+          sub = eager_loads(sub_schema)
+          if sub.present?
+            result.push(function => sub)
+          else
+            result.push function
+          end
+        end
       end
     end
 
