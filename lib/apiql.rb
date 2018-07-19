@@ -122,7 +122,7 @@ class APIQL
 
           @eager_load = eager_loads(sub_schema)
           data = public_send(function, *params)
-          if @eager_load.present? && !data.is_a?(::Hash)
+          if @eager_load.present? && !data.is_a?(::Hash) && !data.is_a?(::Array)
             if data.respond_to?(:each) && data.respond_to?(:map)
               data = data.eager_load(eager_load)
             elsif data.respond_to?(:id)
