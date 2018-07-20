@@ -39,6 +39,28 @@ class APIQL
         value.is_a?(Hash)
     end
 
+    def eager_loads(schema)
+      result = []
+
+      schema&.each do |call|
+        if call.is_a? Hash
+          call.each do |function, sub_schema|
+            next if function.include? '('
+            function = function.split('.').first if function.include? '.'
+
+            sub = eager_loads(sub_schema)
+            if sub.present?
+              result.push(function => sub)
+            else
+              result.push function
+            end
+          end
+        end
+      end
+
+      result
+    end
+
     private
 
     def redis
@@ -120,7 +142,7 @@ class APIQL
           function = reg[:name]
           params = @context.parse_params(reg[:params].presence)
 
-          @eager_load = eager_loads(sub_schema)
+          @eager_load = APIQL::eager_loads(sub_schema)
           data = public_send(function, *params)
           if @eager_load.present? && !data.is_a?(::Hash) && !data.is_a?(::Array)
             if data.respond_to?(:each) && data.respond_to?(:map)
@@ -157,28 +179,6 @@ class APIQL
   end
 
   private
-
-  def eager_loads(schema)
-    result = []
-
-    schema.each do |call|
-      if call.is_a? Hash
-        call.each do |function, sub_schema|
-          next if function.include? '('
-          function = function.split('.').first if function.include? '.'
-
-          sub = eager_loads(sub_schema)
-          if sub.present?
-            result.push(function => sub)
-          else
-            result.push function
-          end
-        end
-      end
-    end
-
-    result
-  end
 
   class Entity
     class << self
@@ -278,8 +278,25 @@ class APIQL
       end
     end
 
+    def eager_load
+      result = @eager_load
+
+      @eager_load = nil
+
+      result
+    end
+
     def render_attribute(field, params = nil, schema = nil)
+      @eager_load = APIQL::eager_loads(schema)
       data = get_field(field, params)
+
+      if @eager_load.present? && !data.is_a?(::Hash) && !data.is_a?(::Array)
+        if data.respond_to?(:each) && data.respond_to?(:map)
+          unless data.loaded?
+            data = data.eager_load(eager_load)
+          end
+        end
+      end
 
       if data.is_a?(Hash) && schema.present?
         respond = {}
