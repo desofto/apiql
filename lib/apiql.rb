@@ -244,7 +244,6 @@ class APIQL
       names = field.split('.')
       if names.count > 1
         o = nil
-
         names.each do |field|
           if o.present?
             if o.respond_to? field
@@ -299,19 +298,7 @@ class APIQL
       end
 
       if data.is_a?(Hash) && schema.present?
-        respond = {}
-
-        schema.each do |field|
-          if field.is_a? Hash
-            field.each do |field, sub_schema|
-              respond[field] = render_value(data[field.to_sym], sub_schema)
-            end
-          else
-            respond[field] = render_value(data[field.to_sym])
-          end
-        end
-
-        respond
+        HashEntity.new(data, @context).render(schema)
       else
         render_value(data, schema)
       end
@@ -328,7 +315,23 @@ class APIQL
 
   class HashEntity < Entity
     def get_field(field, params = nil)
-      object[field.to_sym]
+      o = nil
+
+      field.split('.').each do |name|
+        if o.present?
+          if o.respond_to? name
+            o = o.public_send(name)
+          else
+            o = nil
+            break
+          end
+        else
+          o = object[name.to_sym]
+          break unless o.present?
+        end
+      end
+
+      o
     end
   end
 
