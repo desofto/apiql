@@ -245,14 +245,7 @@ class APIQL
       if names.count > 1
         o = nil
         names.each do |field|
-          if o.present?
-            if o.respond_to? field
-              o = o.public_send(field, *params)
-            else
-              o = nil
-              break
-            end
-          else
+          if o.nil?
             return unless field.to_sym.in? self.class.apiql_attributes
 
             if respond_to? field
@@ -261,7 +254,14 @@ class APIQL
               o = object.public_send(field, *params)
             end
 
-            break unless o.present?
+            break if o.nil?
+          else
+            if o.respond_to? field
+              o = o.public_send(field, *params)
+            else
+              o = nil
+              break
+            end
           end
         end
 
@@ -318,16 +318,16 @@ class APIQL
       o = nil
 
       field.split('.').each do |name|
-        if o.present?
+        if o.nil?
+          o = object[name.to_sym]
+          break if o.nil?
+        else
           if o.respond_to? name
             o = o.public_send(name)
           else
             o = nil
             break
           end
-        else
-          o = object[name.to_sym]
-          break unless o.present?
         end
       end
 
