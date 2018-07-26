@@ -99,15 +99,15 @@ class APIQL
           end
 
           ptr.push(key)
-        elsif reg = schema.match(/\A\s*(?<name>[\w\.]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\{(?<rest>.*)\z/m)
+        elsif reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s*)?(?<name>[\w\.]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\{(?<rest>.*)\z/m)
           schema = reg[:rest]
 
           pool.push(ptr)
-          ptr.push("#{reg[:name]}(#{reg[:params]})" => (ptr = []))
-        elsif reg = schema.match(/\A\s*(?<name>[\w\.]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\n?(?<rest>.*)\z/m)
+          ptr.push("#{reg[:alias] || reg[:name]}: #{reg[:name]}(#{reg[:params]})" => (ptr = []))
+        elsif reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s*)?(?<name>[\w\.]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\n?(?<rest>.*)\z/m)
           schema = reg[:rest]
 
-          ptr.push("#{reg[:name]}(#{reg[:params]})")
+          ptr.push("#{reg[:alias] || reg[:name]}: #{reg[:name]}(#{reg[:params]})")
         else
           raise Error, schema
         end
@@ -136,9 +136,10 @@ class APIQL
     schema.map do |call|
       if call.is_a? ::Hash
         call.each do |function, sub_schema|
-          reg = function.match(/\A(?<name>[\w\.]+)(\((?<params>.*?)\))?\z/)
+          reg = function.match(/\A((?<alias>[\w\.]+):\s*)?(?<name>[\w\.]+)(\((?<params>.*?)\))?\z/)
           raise Error, function unless reg.present?
 
+          name = reg[:alias] || reg[:name]
           function = reg[:name]
           params = @context.parse_params(reg[:params].presence)
 
@@ -152,12 +153,13 @@ class APIQL
             end
           end
 
-          result[function] = @context.render_value(data, sub_schema)
+          result[name] = @context.render_value(data, sub_schema)
         end
       else
-        reg = call.match(/\A(?<name>[\w\.]+)(\((?<params>.*?)\))?\z/)
+        reg = call.match(/\A((?<alias>[\w\.]+):\s*)?(?<name>[\w\.]+)(\((?<params>.*?)\))?\z/)
         raise Error, call unless reg.present?
 
+        name = reg[:alias] || reg[:name]
         function = reg[:name]
         params = @context.parse_params(reg[:params].presence)
 
@@ -171,7 +173,7 @@ class APIQL
           data = nil
         end
 
-        result[function] = data
+        result[name] = data
       end
     end
 
