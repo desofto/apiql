@@ -7,12 +7,90 @@ class APIQL
     end
   end
 
+  module CRUD
+    def model(klass)
+      define_method "#{klass.name.pluralize.underscore}" do |page = nil, page_size = 10|
+        authorize! :read, klass
+
+        if page.present?
+          {
+            total: klass.count,
+            items: klass.offset(page * page_size).limit(page_size)
+          }
+        else
+          klass.all
+        end
+      end
+
+      define_method "#{klass.name.underscore}" do |id|
+        item = klass.find(id)
+
+        authorize! :read, item
+
+        item
+      end
+
+      define_method "#{klass.name.underscore}.create" do |params|
+        authorize! :create, klass
+
+        klass_entity = "#{klass.name}::Entity".constantize
+
+        if klass_entity.respond_to?(:create_params, params)
+          params = klass_entity.send(:create_params, params)
+        elsif klass_entity.respond_to?(:params, params)
+          params = klass_entity.send(:params, params)
+        end
+
+        klass.create!(params)
+      end
+
+      define_method "#{klass.name.underscore}.update" do |id, params|
+        item = klass.find(id)
+
+        authorize! :update, item
+
+        klass_entity = "#{klass.name}::Entity".constantize
+
+        if klass_entity.respond_to?(:update_params, params)
+          params = klass_entity.send(:update_params, params)
+        elsif klass_entity.respond_to?(:params, params)
+          params = klass_entity.send(:params, params)
+        end
+
+        item.update!(params)
+      end
+
+      define_method "#{klass.name.underscore}.destroy" do |id|
+        item = klass.find(id)
+
+        authorize! :destroy, item
+
+        item.destroy!
+      end
+    end
+  end
+
   class Error < StandardError; end
   class CacheMissed < StandardError; end
 
   attr_reader :context
+  delegate :authorize!, to: :@context
 
   class << self
+    include ::APIQL::CRUD
+
+    def mount(klass, as: nil)
+      as ||= klass.name.split('::').last.underscore
+      as += '.' if as.present?
+
+      klass.instance_methods(false).each do |method|
+        klass.alias_method("#{as}#{method}", method)
+        klass.remove_method(method) if as.present?
+      end
+
+      include klass
+    end
+
     @@cache = {}
 
     def cache(params)
@@ -183,6 +261,8 @@ class APIQL
   private
 
   class Entity
+    delegate :authorize!, to: :@context
+
     class << self
       attr_reader :apiql_attributes
 
@@ -209,6 +289,7 @@ class APIQL
     def initialize(object, context)
       @object = object
       @context = context
+      authorize! :read, object
       @context.inject_delegators(self)
     end
 
@@ -316,6 +397,8 @@ class APIQL
   end
 
   class HashEntity < Entity
+    def authorize!(*args); end
+
     def get_field(field, params = nil)
       o = nil
 
@@ -347,6 +430,8 @@ class APIQL
         end
       end
     end
+
+    def authorize!(*args); end
 
     def inject_delegators(target)
       @fields.each do |field|

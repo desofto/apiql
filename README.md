@@ -4,7 +4,7 @@ Implementation of the API language similar to GraphQL for Ruby on Rails.
 
 It compiles requests into Hashes for faster rendering.
 
-Now, it automatically detects nested entities and eager-loads them for faster DB access!
+It automatically detects nested entities and eager-loads them for faster DB access!
 
 Define your responder (requested methods):
 
@@ -31,16 +31,16 @@ class UserAPIQL < ::APIQL
 end
 
 ```
-In controller or Grape API endpoint, handler of POST /user method:
+In controller or Grape API endpoint, handler of POST /apiql method (or any other, see below APIQL.endpoint):
 
 ```ruby
-def user
+def apiql
   schema = APIQL.cache(params)
   UserAPIQL.new(self, :session, :current_user, :params).render(schema)
 end
 
 ```
-variables `session`, `current_user` and `params` (you can list any you need) will be stored into context you can use in presenters and handlers
+variables `session`, `current_user` and `params` (you can list any you need in your presenters/responders) will be stored into context you can use in presenters and handlers
 
 Define presenters for your models:
 
@@ -66,14 +66,14 @@ assets/javascripts/application.js:
 
 ```javascript
 //= require apiql
-APIQL.endpoint = "/"
+APIQL.endpoint = "/apiql"
 ```
 
 ```javascript
-// function apiql(endpoint, schema, params = {}, form = null) -- schema is cached, so entire request is passed only for first time, later - short hashes only
+// function apiql(schema, params = {}, form = null) -- schema is cached, so entire request is passed only for first time, later - short hashes only
 
 authenticate(email, password) {
-  apiql("user", `
+  apiql(`
     logout()
 
     authenticate(email, password) {
@@ -88,7 +88,7 @@ authenticate(email, password) {
       }
    }
   `, {
-    email: email, // these var will be passed into methods on the server side
+    email: email, // these vars will be passed into methods on the server side
     password: password
   })
   .then(response => { // response contains results of called methods
@@ -97,7 +97,7 @@ authenticate(email, password) {
 }
 
 logout() {
-  apiql("user", `
+  apiql(`
     logout
   `)
   .then(response => {
@@ -109,12 +109,12 @@ logout() {
 you can call methods on entities:
 
 ```javascript
-  apiql("user", `
+  apiql(`
     authenticate(email, password) {
       token
     }
 
-    me.reload {
+    user: me.reload {
       email full_name role token
 
       roles(filter) {
@@ -132,7 +132,7 @@ you can call methods on entities:
     password: password
   })
   .then(response => {
-    let user = response['me.reload'] // name in response equals to called
+    let user = response.user
   })
 }
 ```
@@ -143,12 +143,6 @@ config/initializers/apiql.rb:
 
 ```ruby
 class APIQL
-  delegate :authorize!, to: :@context
-
-  class Entity
-    delegate :authorize!, to: :@context
-  end
-
   class Context
     def authorize!(*args)
       ability.authorize!(*args)
@@ -163,22 +157,21 @@ class APIQL
 end
 ```
 
-and even authorize access to every entity:
+you can add CRUD methods for your models:
 
 ```ruby
-class ApplicationRecord < ActiveRecord::Base
-  class BaseEntity < APIQL::Entity
-    def initialize(object, context)
-      context.authorize! :read, object
-      super(object, context)
-    end
-  end
+class UserAPIQL < ::APIQL
+  model ::User
+  model ::Role
 end
+```
 
-class User < ApplicationRecord
-  class Entity < BaseEntity
-    ...
-  end
+or mount methods from external modules:
+
+```ruby
+class UserAPIQL < ::APIQL
+  mount ::Services::User # all methouds could be called with "user" prefix like "user.logout()"
+  mount ::Services::Common, as: '' # all methods could be called without prefixes
+  mount ::Services::Employer, as: 'dashboard" # all methods could be called with specified prefix
 end
-
 ```

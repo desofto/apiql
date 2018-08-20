@@ -13,7 +13,7 @@ const APIQL = {
     return hash
   },
 
-  call(endpoint, schema, params = {}, form = null) {
+  call(schema, params = {}, form = null) {
     return new Promise((resolve, reject) => {
       if(params instanceof FormData) {
         form = params
@@ -32,7 +32,7 @@ const APIQL = {
         params.apiql = this.hash(schema)
       }
 
-      Vue.http.post(`${APIQL.endpoint}${endpoint}`, form || params)
+      Vue.http.post(APIQL.endpoint, form || params)
       .then(response => {
         resolve(response.body)
       })
@@ -50,7 +50,7 @@ const APIQL = {
           params.apiql_request = schema
         }
 
-        Vue.http.post(`${APIQL.endpoint}${endpoint}`, form || params)
+        Vue.http.post(APIQL.endpoint, form || params)
         .then(response => {
           resolve(response.body)
         })
@@ -66,6 +66,6 @@ const APIQL = {
   }
 }
 
-function apiql(endpoint, schema, params = {}, form = null) {
-  return APIQL.call(endpoint, schema, params, form)
+function apiql(schema, params = {}, form = null) {
+  return APIQL.call(schema, params, form)
 }
