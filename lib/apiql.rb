@@ -7,6 +7,13 @@ class APIQL
     end
   end
 
+  class ::Hash
+    def deep_merge(second)
+      merger = proc { |key, v1, v2| Hash === v1 && Hash === v2 ? v1.merge(v2, &merger) : Array === v1 && Array === v2 ? v1 | v2 : [:undefined, nil, :nil].include?(v2) ? v1 : v2 }
+      self.merge(second.to_h, &merger)
+    end
+  end
+
   module CRUD
     def model(klass)
       define_method "#{klass.name.pluralize.underscore}" do |page = nil, page_size = 10|
@@ -231,7 +238,9 @@ class APIQL
             end
           end
 
-          result[name] = @context.render_value(data, sub_schema)
+          result = result.deep_merge({
+            name => @context.render_value(data, sub_schema)
+          })
         end
       else
         reg = call.match(/\A((?<alias>[\w\.]+):\s*)?(?<name>[\w\.]+)(\((?<params>.*?)\))?\z/)
@@ -251,7 +260,9 @@ class APIQL
           data = nil
         end
 
-        result[name] = data
+        result = result.deep_merge({
+          name => data
+        })
       end
     end
 
@@ -304,13 +315,17 @@ class APIQL
             reg = field.match(/\A(?<name>[\w\.]+)(\((?<params>.*?)\))?\z/)
             raise Error, field unless reg.present?
 
-            respond[reg[:name]] = render_attribute(reg[:name], reg[:params].presence, sub_schema)
+            respond = respond.deep_merge({
+              reg[:name] => render_attribute(reg[:name], reg[:params].presence, sub_schema)
+            })
           end
         else
           reg = field.match(/\A(?<name>[\w\.]+)(\((?<params>.*?)\))?\z/)
           raise Error, field unless reg.present?
 
-          respond[reg[:name]] = render_attribute(reg[:name], reg[:params].presence)
+          respond = respond.deep_merge({
+            reg[:name] => render_attribute(reg[:name], reg[:params].presence)
+          })
         end
       end
 
