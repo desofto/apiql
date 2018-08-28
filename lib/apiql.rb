@@ -105,7 +105,8 @@ class APIQL
       request = params[:apiql_request]
 
       if request.present?
-        redis&.set("api-ql-cache-#{request_id}", request)
+        request = compile(request)
+        redis&.set("api-ql-cache-#{request_id}", request.to_json)
         @@cache[request_id] = request
       else
         request = @@cache[request_id]
@@ -131,6 +132,7 @@ class APIQL
         if call.is_a? Hash
           call.each do |function, sub_schema|
             next if function.include? '('
+            function = function.split(':').last.strip if function.include? ':'
             function = function.split('.').first if function.include? '.'
 
             sub = eager_loads(sub_schema)
@@ -163,36 +165,67 @@ class APIQL
       ptr = result
       pool = []
 
+      push_key = lambda do |key, subtree = false|
+        ptr.each_with_index do |e, index|
+          if e.is_a?(::Hash)
+            return e[key] if e[key]
+          elsif e == key
+            if subtree
+              ptr[index] = { key => (p = []) }
+              return p
+            end
+            return
+          end
+        end
+
+        if subtree
+          ptr.push(key => (p = []))
+          return p
+        else
+          ptr.push(key)
+        end
+      end
+
+      last_key = nil
+
       while schema.present? do
         if reg = schema.match(/\A\s*\{(?<rest>.*)\z/m) # {
           schema = reg[:rest]
 
           pool.push(ptr)
-          key = ptr.pop
-          ptr.push(key => (ptr = []))
+
+          ptr = push_key.call(last_key, true)
         elsif reg = schema.match(/\A\s*\}(?<rest>.*)\z/m) # }
           schema = reg[:rest]
 
           ptr = pool.pop
-        elsif pool.any? && (reg = schema.match(/\A\s*(?<name>[\w\.]+)(\((?<params>.*?)\))?(?<rest>.*)\z/m))
-          schema = reg[:rest]
+        elsif pool.any?
+          if reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s*)?(?<name>[\w\.]+)(\((?<params>.*?)\))?(?<rest>.*)\z/m)
+            schema = reg[:rest]
 
-          if reg[:params].nil?
-            key = reg[:name]
+            key = reg[:alias].present? ? "#{reg[:alias]}: #{reg[:name]}" : reg[:name]
+            key += "(#{reg[:params]})" unless reg[:params].nil?
+
+            push_key.call(key)
+
+            last_key = key
           else
-            key = "#{reg[:name]}(#{reg[:params]})"
+            raise Error, schema
           end
-
-          ptr.push(key)
         elsif reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s*)?(?<name>[\w\.]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\{(?<rest>.*)\z/m)
           schema = reg[:rest]
 
+          key = "#{reg[:alias] || reg[:name]}: #{reg[:name]}(#{reg[:params]})"
+
           pool.push(ptr)
-          ptr.push("#{reg[:alias] || reg[:name]}: #{reg[:name]}(#{reg[:params]})" => (ptr = []))
+
+          ptr = push_key.call(key, true)
         elsif reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s*)?(?<name>[\w\.]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\n?(?<rest>.*)\z/m)
           schema = reg[:rest]
 
-          ptr.push("#{reg[:alias] || reg[:name]}: #{reg[:name]}(#{reg[:params]})")
+          key = "#{reg[:alias] || reg[:name]}: #{reg[:name]}(#{reg[:params]})"
+
+          push_key.call(key)
         else
           raise Error, schema
         end
@@ -238,9 +271,13 @@ class APIQL
             end
           end
 
-          result = result.deep_merge({
-            name => @context.render_value(data, sub_schema)
-          })
+          if result[name].is_a? ::Hash
+            result = result.deep_merge({
+              name => @context.render_value(data, sub_schema)
+            })
+          else
+            result[name] = @context.render_value(data, sub_schema)
+          end
         end
       else
         reg = call.match(/\A((?<alias>[\w\.]+):\s*)?(?<name>[\w\.]+)(\((?<params>.*?)\))?\z/)
@@ -260,9 +297,13 @@ class APIQL
           data = nil
         end
 
-        result = result.deep_merge({
-          name => data
-        })
+        if result[name].is_a? ::Hash
+          result = result.deep_merge({
+            name => data
+          })
+        else
+          result[name] = data
+        end
       end
     end
 
@@ -312,20 +353,32 @@ class APIQL
       schema.each do |field|
         if field.is_a? Hash
           field.each do |field, sub_schema|
-            reg = field.match(/\A(?<name>[\w\.]+)(\((?<params>.*?)\))?\z/)
+            reg = field.match(/\A((?<alias>[\w\.]+):\s*)?(?<name>[\w\.]+)(\((?<params>.*?)\))?\z/)
             raise Error, field unless reg.present?
 
-            respond = respond.deep_merge({
-              reg[:name] => render_attribute(reg[:name], reg[:params].presence, sub_schema)
-            })
+            name = reg[:alias] || reg[:name]
+
+            if respond[name].is_a? ::Hash
+              respond = respond.deep_merge({
+                name => render_attribute(reg[:name], reg[:params].presence, sub_schema)
+              })
+            else
+              respond[name] = render_attribute(reg[:name], reg[:params].presence, sub_schema)
+            end
           end
         else
-          reg = field.match(/\A(?<name>[\w\.]+)(\((?<params>.*?)\))?\z/)
+          reg = field.match(/\A((?<alias>[\w\.]+):\s*)?(?<name>[\w\.]+)(\((?<params>.*?)\))?\z/)
           raise Error, field unless reg.present?
 
-          respond = respond.deep_merge({
-            reg[:name] => render_attribute(reg[:name], reg[:params].presence)
-          })
+          name = reg[:alias] || reg[:name]
+
+          if respond[name].is_a? ::Hash
+            respond = respond.deep_merge({
+              name => render_attribute(reg[:name], reg[:params].presence)
+            })
+          else
+            respond[name] = render_attribute(reg[:name], reg[:params].presence)
+          end
         end
       end
 
