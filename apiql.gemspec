@@ -4,7 +4,7 @@ $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 
 Gem::Specification.new do |spec|
   spec.name          = 'apiql'
-  spec.version       = '0.4.5'
+  spec.version       = '0.4.6'
   spec.authors       = ['Dmitry Silchenko']
   spec.email         = ['dmitry@desofto.com']
 

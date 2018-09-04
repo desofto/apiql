@@ -22,15 +22,15 @@ class APIQL
         if page.present?
           {
             total: klass.count,
-            items: klass.offset(page * page_size).limit(page_size)
+            items: klass.eager_load(eager_load).offset(page * page_size).limit(page_size)
           }
         else
-          klass.all
+          klass.eager_load(eager_load).all
         end
       end
 
       define_method "#{klass.name.underscore}" do |id|
-        item = klass.find(id)
+        item = klass.eager_load(eager_load).find(id)
 
         authorize! :read, item
 
@@ -243,7 +243,7 @@ class APIQL
   def eager_load
     result = @eager_load
 
-    @eager_load = nil
+    @eager_load = []
 
     result
   end
@@ -264,7 +264,7 @@ class APIQL
           @eager_load = APIQL::eager_loads(sub_schema)
           data = public_send(function, *params)
           if @eager_load.present? && !data.is_a?(::Hash) && !data.is_a?(::Array)
-            if data.respond_to?(:each) && data.respond_to?(:map)
+            if data.respond_to?(:eager_load)
               data = data.eager_load(eager_load)
             elsif data.respond_to?(:id)
               data = data.class.eager_load(eager_load).find(data.id)
@@ -287,7 +287,7 @@ class APIQL
         function = reg[:name]
         params = @context.parse_params(reg[:params].presence)
 
-        @eager_load = ''
+        @eager_load = []
         data = public_send(function, *params)
         if data.is_a? Array
           if data.any? { |item| !APIQL::simple_class?(item) }
