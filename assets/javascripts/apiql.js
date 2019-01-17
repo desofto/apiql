@@ -2,7 +2,7 @@ const APIQL = {
   on_error: null,
   endpoint: '',
 
-  hash(s) {
+  hash: function(s) {
     let hash = 0, i, chr
     if(s.length === 0) return hash
     for(i = 0; i < s.length; i++) {
@@ -13,30 +13,33 @@ const APIQL = {
     return hash
   },
 
-  call(schema, params = {}, form = null) {
-    return new Promise((resolve, reject) => {
+  call: function(schema, params, form) {
+    if(!params) params = {}
+    if(!form) form = null
+
+    return new Promise(function(resolve, reject) {
       if(params instanceof FormData) {
         form = params
         params = {}
       }
 
       if(form) {
-        Object.keys(params).forEach(key => {
+        Object.keys(params).forEach(function(key) {
           form.append(key, params[key])
         })
       }
 
       if(form) {
-        form.append('apiql', this.hash(schema))
+        form.append('apiql', APIQL.hash(schema))
       } else {
-        params.apiql = this.hash(schema)
+        params.apiql = APIQL.hash(schema)
       }
 
       Vue.http.post(APIQL.endpoint, form || params)
-      .then(response => {
+      .then(function(response) {
         resolve(response.body)
       })
-      .catch(response => {
+      .catch(function(response) {
         if(response.status == 401 && APIQL.on_error) {
           APIQL.on_error(response)
           return
@@ -51,10 +54,10 @@ const APIQL = {
         }
 
         Vue.http.post(APIQL.endpoint, form || params)
-        .then(response => {
+        .then(function(response) {
           resolve(response.body)
         })
-        .catch(response => {
+        .catch(function(response) {
           if(APIQL.on_error) {
             APIQL.on_error(response)
           } else {
@@ -66,6 +69,8 @@ const APIQL = {
   }
 }
 
-function apiql(schema, params = {}, form = null) {
+function apiql(schema, params, form) {
+  if(!params) params = {}
+  if(!form) form = null
   return APIQL.call(schema, params, form)
 }
