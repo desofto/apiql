@@ -251,7 +251,7 @@ class APIQL
   def render(schema)
     result = {}
 
-    schema.map do |call|
+    schema.each do |call|
       if call.is_a? ::Hash
         call.each do |function, sub_schema|
           reg = function.match(/\A((?<alias>[\w\.]+):\s*)?(?<name>[\w\.]+)(\((?<params>.*?)\))?\z/)
