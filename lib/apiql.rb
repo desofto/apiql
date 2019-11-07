@@ -108,6 +108,7 @@ class APIQL
         request = compile(request)
         redis&.set("api-ql-cache-#{request_id}", request.to_json)
         @@cache[request_id] = request
+        @@cache = {} if(@@cache.count > 1000)
       else
         request = @@cache[request_id]
         request ||= JSON.parse(redis.get("api-ql-cache-#{request_id}")) rescue nil
@@ -254,7 +255,7 @@ class APIQL
     schema.each do |call|
       if call.is_a? ::Hash
         call.each do |function, sub_schema|
-          reg = function.match(/\A((?<alias>[\w\.]+):\s*)?(?<name>[\w\.]+)(\((?<params>.*?)\))?\z/)
+          reg = function.match(/\A((?<alias>[\w\.\!]+):\s*)?(?<name>[\w\.\!]+)(\((?<params>.*?)\))?\z/)
           raise Error, function unless reg.present?
 
           name = reg[:alias] || reg[:name]
@@ -265,9 +266,9 @@ class APIQL
           data = public_send(function, *params)
           if @eager_load.present? && !data.is_a?(::Hash) && !data.is_a?(::Array)
             if data.respond_to?(:eager_load)
-              data = data.eager_load(eager_load)
+              data = data.includes(eager_load)
             elsif data.respond_to?(:id)
-              data = data.class.eager_load(eager_load).find(data.id)
+              data = data.class.includes(eager_load).find(data.id)
             end
           end
 
@@ -280,7 +281,7 @@ class APIQL
           end
         end
       else
-        reg = call.match(/\A((?<alias>[\w\.]+):\s*)?(?<name>[\w\.]+)(\((?<params>.*?)\))?\z/)
+        reg = call.match(/\A((?<alias>[\w\.\!]+):\s*)?(?<name>[\w\.\!]+)(\((?<params>.*?)\))?\z/)
         raise Error, call unless reg.present?
 
         name = reg[:alias] || reg[:name]
@@ -353,7 +354,7 @@ class APIQL
       schema.each do |field|
         if field.is_a? Hash
           field.each do |field, sub_schema|
-            reg = field.match(/\A((?<alias>[\w\.]+):\s*)?(?<name>[\w\.]+)(\((?<params>.*?)\))?\z/)
+            reg = field.match(/\A((?<alias>[\w\.\!]+):\s*)?(?<name>[\w\.\!]+)(\((?<params>.*?)\))?\z/)
             raise Error, field unless reg.present?
 
             name = reg[:alias] || reg[:name]
@@ -367,7 +368,7 @@ class APIQL
             end
           end
         else
-          reg = field.match(/\A((?<alias>[\w\.]+):\s*)?(?<name>[\w\.]+)(\((?<params>.*?)\))?\z/)
+          reg = field.match(/\A((?<alias>[\w\.\!]+):\s*)?(?<name>[\w\.\!]+)(\((?<params>.*?)\))?\z/)
           raise Error, field unless reg.present?
 
           name = reg[:alias] || reg[:name]
