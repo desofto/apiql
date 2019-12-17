@@ -83,7 +83,7 @@ const APIQL = {
         .then(function(response) {
           resolve(response.body)
         })
-        .catch(function(response) {
+        .catch(function(ressponse) {
           if(APIQL.on_error) {
             APIQL.on_error(response)
           } else {

@@ -157,13 +157,62 @@ class APIQL
 end
 ```
 
-you can add CRUD methods for your models:
+CRUD methods available for all models:
 
-```ruby
-class UserAPIQL < ::APIQL
-  model ::User
-  model ::Role
-end
+```js
+  apiql(`
+    User.create(user)
+  `, {
+    user: {
+      email: this.email,
+      full_name: this.full_name
+    }
+  })
+  .then(response => {
+    ...
+  })
+
+  apiql(`
+    User.find(id) {
+      id email full_name
+    }
+  `, {
+    id: this.id
+  })
+  .then(response => {
+    ...
+  })
+
+  apiql(`
+    User.all {
+      id email full_name
+    }
+  `)
+  .then(response => {
+    ...
+  })
+
+  apiql(`
+    User.update(id, user)
+  `, {
+    id: this.id,
+    user: {
+      email: this.email,
+      full_name: this.full_name
+    }
+  })
+  .then(response => {
+    ...
+  })
+
+  apiql(`
+    User.destroy(id)
+  `, {
+    id: this.id
+  })
+  .then(response => {
+    ...
+  })
 ```
 
 or mount methods from external modules:

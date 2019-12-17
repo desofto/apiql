@@ -14,71 +14,6 @@ class APIQL
     end
   end
 
-  module CRUD
-    def model(klass, as: nil)
-      as ||= klass.name
-
-      define_method "#{as}.all" do |page = nil, page_size = 10|
-        authorize! :read, klass
-
-        if page.present?
-          {
-            total: klass.count,
-            items: klass.eager_load(eager_load).offset(page * page_size).limit(page_size)
-          }
-        else
-          klass.eager_load(eager_load).all
-        end
-      end
-
-      define_method "#{as}.find" do |id|
-        item = klass.eager_load(eager_load).find(id)
-
-        authorize! :read, item
-
-        item
-      end
-
-      define_method "#{as}.create" do |params|
-        authorize! :create, klass
-
-        klass_entity = "#{klass.name}::Entity".constantize
-
-        if klass_entity.respond_to?(:create_params, params)
-          params = klass_entity.send(:create_params, params)
-        elsif klass_entity.respond_to?(:params, params)
-          params = klass_entity.send(:params, params)
-        end
-
-        klass.create!(params)
-      end
-
-      define_method "#{as}.update" do |id, params|
-        item = klass.find(id)
-
-        authorize! :update, item
-
-        klass_entity = "#{klass.name}::Entity".constantize
-
-        if klass_entity.respond_to?(:update_params, params)
-          params = klass_entity.send(:update_params, params)
-        elsif klass_entity.respond_to?(:params, params)
-          params = klass_entity.send(:params, params)
-        end
-
-        item.update!(params)
-      end
-
-      define_method "#{as}.destroy" do |id|
-        item = klass.find(id)
-
-        authorize! :destroy, item
-
-        item.destroy!
-      end
-    end
-  end
-
   class Error < StandardError; end
   class CacheMissed < StandardError; end
 
@@ -86,8 +21,6 @@ class APIQL
   delegate :authorize!, to: :@context
 
   class << self
-    include ::APIQL::CRUD
-
     def mount(klass, as: nil)
       as ||= klass.name.split('::').last.underscore
       as += '.' if as.present?
@@ -113,7 +46,7 @@ class APIQL
         @@cache = {} if(@@cache.count > 1000)
       else
         request = @@cache[request_id]
-        request ||= JSON.parse(redis.get("api-ql-cache-#{request_id}")) rescue nil
+        request ||= JSON.parse(redis&.get("api-ql-cache-#{request_id}")) rescue nil
         raise CacheMissed unless request.present? && request.is_a?(::Array)
       end
 
@@ -203,7 +136,7 @@ class APIQL
 
           ptr = pool.pop
         elsif pool.any?
-          if reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s*)?(?<name>[\w\.\:]+)(\((?<params>.*?)\))?(?<rest>.*)\z/m)
+          if reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s*)?(?<name>[\w\.\:\!]+)(\((?<params>.*?)\))?(?<rest>.*)\z/m)
             schema = reg[:rest]
 
             key = reg[:alias].present? ? "#{reg[:alias]}: #{reg[:name]}" : reg[:name]
@@ -215,7 +148,7 @@ class APIQL
           else
             raise Error, schema
           end
-        elsif reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s*)?(?<name>[\w\.\:]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\{(?<rest>.*)\z/m)
+        elsif reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s+)?(?<name>[\w\.\:\!]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\{(?<rest>.*)\z/m)
           schema = reg[:rest]
 
           key = "#{reg[:alias] || reg[:name]}: #{reg[:name]}(#{reg[:params]})"
@@ -223,7 +156,7 @@ class APIQL
           pool.push(ptr)
 
           ptr = push_key.call(key, true)
-        elsif reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s*)?(?<name>[\w\.\:]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\n?(?<rest>.*)\z/m)
+        elsif reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s+)?(?<name>[\w\.\:\!]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\n?(?<rest>.*)\z/m)
           schema = reg[:rest]
 
           key = "#{reg[:alias] || reg[:name]}: #{reg[:name]}(#{reg[:params]})"
@@ -257,7 +190,7 @@ class APIQL
     schema.each do |call|
       if call.is_a? ::Hash
         call.each do |function, sub_schema|
-          reg = function.match(/\A((?<alias>[\w\.\!]+):\s*)?(?<name>[\w\.\!]+)(\((?<params>.*?)\))?\z/)
+          reg = function.match(/\A((?<alias>[\w\.\:\!]+):\s+)?(?<name>[\w\.\:\!]+)(\((?<params>.*?)\))?\z/)
           raise Error, function unless reg.present?
 
           name = reg[:alias] || reg[:name]
@@ -265,7 +198,9 @@ class APIQL
           params = @context.parse_params(reg[:params].presence)
 
           @eager_load = APIQL::eager_loads(sub_schema)
-          data = public_send(function, *params)
+
+          data = call_function(function, *params)
+
           if @eager_load.present? && !data.is_a?(::Hash) && !data.is_a?(::Array)
             if data.respond_to?(:eager_load)
               data = data.includes(eager_load)
@@ -283,7 +218,7 @@ class APIQL
           end
         end
       else
-        reg = call.match(/\A((?<alias>[\w\.\!]+):\s*)?(?<name>[\w\.\!]+)(\((?<params>.*?)\))?\z/)
+        reg = call.match(/\A((?<alias>[\w\.\:\!]+):\s+)?(?<name>[\w\.\:\!]+)(\((?<params>.*?)\))?\z/)
         raise Error, call unless reg.present?
 
         name = reg[:alias] || reg[:name]
@@ -291,7 +226,9 @@ class APIQL
         params = @context.parse_params(reg[:params].presence)
 
         @eager_load = []
-        data = public_send(function, *params)
+
+        data = call_function(function, *params)
+
         if data.is_a? Array
           if data.any? { |item| !APIQL::simple_class?(item) }
             data = nil
@@ -315,11 +252,41 @@ class APIQL
 
   private
 
+  def call_function(name, *params)
+    if respond_to?(name)
+      public_send(name, *params)
+    else
+      o = nil
+
+      names = name.split('.')
+      names.each_with_index do |name, index|
+        if o.nil?
+          o = "#{name}::Entity".constantize
+          o.instance_variable_set('@context', @context)
+          o.instance_variable_set('@eager_load', @eager_load)
+        elsif o.respond_to?(name)
+          o =
+            if index == names.count - 1
+              o.public_send(name, *params)
+            else
+              o.public_send(name)
+            end
+        else
+          o = nil
+          break
+        end
+      end
+
+      o
+    end
+  end
+
   class Entity
     delegate :authorize!, to: :@context
 
     class << self
       attr_reader :apiql_attributes
+      delegate :authorize!, to: :@context
 
       def inherited(child)
         super
@@ -330,12 +297,81 @@ class APIQL
 
         child.instance_eval do
           @apiql_attributes = attributes
+
+          names = child.name.split('::')
+          return unless names.last == 'Entity'
+          @apiql_entity_class = names[0..-2].join('::').constantize
         end
       end
 
       def attributes(*attrs)
         @apiql_attributes ||= []
         @apiql_attributes += attrs.map(&:to_sym)
+      end
+
+      def all(page = nil, page_size = 10)
+        authorize! :read, @apiql_entity_class
+
+        if page.present?
+          {
+            total: @apiql_entity_class.count,
+            items: @apiql_entity_class.eager_load(eager_load).offset(page * page_size).limit(page_size)
+          }
+        else
+          @apiql_entity_class.eager_load(eager_load).all
+        end
+      end
+
+      def find(id)
+        item = @apiql_entity_class.eager_load(eager_load).find(id)
+
+        authorize! :read, item
+
+        item
+      end
+
+      def create(params)
+        authorize! :create, @apiql_entity_class
+
+        if respond_to?(:create_params, params)
+          params = create_params(params)
+        elsif respond_to?(:params, params)
+          params = self.params(params)
+        end
+
+        @apiql_entity_class.create!(params)
+      end
+
+      def update(id, params)
+        item = @apiql_entity_class.find(id)
+
+        authorize! :update, item
+
+        if respond_to?(:update_params, params)
+          params = update_params(params)
+        elsif respond_to?(:params, params)
+          params = self.params(params)
+        end
+
+        item.update!(params)
+      end
+
+      def destroy(id)
+        item = @apiql_entity_class.find(id)
+
+        authorize! :destroy, item
+
+        item.destroy!
+      end
+
+      private
+
+      def eager_load
+        result = @eager_load
+
+        @eager_load = []
+
+        result
       end
     end
 
@@ -398,20 +434,26 @@ class APIQL
       names = field.split('.')
       if names.count > 1
         o = nil
-        names.each do |field|
+        names.each_with_index do |field, index|
           if o.nil?
             return unless field.to_sym.in? self.class.apiql_attributes
 
             if respond_to? field
-              o = public_send(field, *params)
+              o = public_send(field)
             else
-              o = object.public_send(field, *params)
+              o = object.public_send(field)
             end
 
             break if o.nil?
           else
+            # o = "#{o.class.name}::Entity".constantize
+
             if o.respond_to? field
-              o = o.public_send(field, *params)
+              if index == names.count - 1
+                o = o.public_send(field, *params)
+              else
+                o = o.public_send(field)
+              end
             else
               o = nil
               break
