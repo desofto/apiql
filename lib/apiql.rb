@@ -15,8 +15,10 @@ class APIQL
   end
 
   module CRUD
-    def model(klass)
-      define_method "#{klass.name.pluralize.underscore}" do |page = nil, page_size = 10|
+    def model(klass, as: nil)
+      as ||= klass.name
+
+      define_method "#{as}.all" do |page = nil, page_size = 10|
         authorize! :read, klass
 
         if page.present?
@@ -29,7 +31,7 @@ class APIQL
         end
       end
 
-      define_method "#{klass.name.underscore}" do |id|
+      define_method "#{as}.find" do |id|
         item = klass.eager_load(eager_load).find(id)
 
         authorize! :read, item
@@ -37,7 +39,7 @@ class APIQL
         item
       end
 
-      define_method "#{klass.name.underscore}.create" do |params|
+      define_method "#{as}.create" do |params|
         authorize! :create, klass
 
         klass_entity = "#{klass.name}::Entity".constantize
@@ -51,7 +53,7 @@ class APIQL
         klass.create!(params)
       end
 
-      define_method "#{klass.name.underscore}.update" do |id, params|
+      define_method "#{as}.update" do |id, params|
         item = klass.find(id)
 
         authorize! :update, item
@@ -67,7 +69,7 @@ class APIQL
         item.update!(params)
       end
 
-      define_method "#{klass.name.underscore}.destroy" do |id|
+      define_method "#{as}.destroy" do |id|
         item = klass.find(id)
 
         authorize! :destroy, item
@@ -201,7 +203,7 @@ class APIQL
 
           ptr = pool.pop
         elsif pool.any?
-          if reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s*)?(?<name>[\w\.]+)(\((?<params>.*?)\))?(?<rest>.*)\z/m)
+          if reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s*)?(?<name>[\w\.\:]+)(\((?<params>.*?)\))?(?<rest>.*)\z/m)
             schema = reg[:rest]
 
             key = reg[:alias].present? ? "#{reg[:alias]}: #{reg[:name]}" : reg[:name]
@@ -213,7 +215,7 @@ class APIQL
           else
             raise Error, schema
           end
-        elsif reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s*)?(?<name>[\w\.]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\{(?<rest>.*)\z/m)
+        elsif reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s*)?(?<name>[\w\.\:]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\{(?<rest>.*)\z/m)
           schema = reg[:rest]
 
           key = "#{reg[:alias] || reg[:name]}: #{reg[:name]}(#{reg[:params]})"
@@ -221,7 +223,7 @@ class APIQL
           pool.push(ptr)
 
           ptr = push_key.call(key, true)
-        elsif reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s*)?(?<name>[\w\.]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\n?(?<rest>.*)\z/m)
+        elsif reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s*)?(?<name>[\w\.\:]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\n?(?<rest>.*)\z/m)
           schema = reg[:rest]
 
           key = "#{reg[:alias] || reg[:name]}: #{reg[:name]}(#{reg[:params]})"
