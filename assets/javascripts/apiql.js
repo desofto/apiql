@@ -1,6 +1,7 @@
 const APIQL = {
   on_error: null,
   endpoint: '',
+  CSRFToken: '',
 
   hash: function(s) {
     let hash = 0, i, chr
@@ -11,6 +12,31 @@ const APIQL = {
       hash |= 0
     }
     return hash
+  },
+
+  post: function(endpoint, data) {
+    return new Promise(function(resolve, reject) {
+      let http = new XMLHttpRequest()
+      http.open("POST", endpoint, true)
+      if(APIQL.CSRFToken.length > 0) {
+        http.setRequestHeader("X-CSRF-Token", APIQL.CSRFToken)
+      }
+      http.setRequestHeader("Content-Type", "application/json;charset=UTF-8")
+      http.onload = function() {
+        if(http.status >= 200 && http.status < 300) {
+          resolve({
+            status: http.status,
+            body: JSON.parse(http.responseText)
+          })
+        } else {
+          reject({
+            status: http.status,
+            body: JSON.parse(http.responseText)
+          })
+        }
+      }
+      http.send(JSON.stringify(data))
+    })
   },
 
   call: function(schema, params, form) {
@@ -35,7 +61,7 @@ const APIQL = {
         params.apiql = APIQL.hash(schema)
       }
 
-      Vue.http.post(APIQL.endpoint, form || params)
+      APIQL.post(APIQL.endpoint, form || params)
       .then(function(response) {
         resolve(response.body)
       })
@@ -53,7 +79,7 @@ const APIQL = {
           params.apiql_request = schema
         }
 
-        Vue.http.post(APIQL.endpoint, form || params)
+        APIQL.post(APIQL.endpoint, form || params)
         .then(function(response) {
           resolve(response.body)
         })
