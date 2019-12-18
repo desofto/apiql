@@ -264,6 +264,7 @@ class APIQL
           o = "#{name}::Entity".constantize
           o.instance_variable_set('@context', @context)
           o.instance_variable_set('@eager_load', @eager_load)
+          @context.inject_delegators(self)
         elsif o.respond_to?(name)
           o =
             if index == names.count - 1
@@ -446,7 +447,7 @@ class APIQL
 
             break if o.nil?
           else
-            # o = "#{o.class.name}::Entity".constantize
+            o = "#{o.name}::Entity".constantize
 
             if o.respond_to? field
               if index == names.count - 1
@@ -548,6 +549,7 @@ class APIQL
 
     def inject_delegators(target)
       @fields.each do |field|
+        next if target.respond_to?(field)
         target.class_eval do
           delegate field, to: :@context
         end
