@@ -265,16 +265,36 @@ class APIQL
           o.instance_variable_set('@context', @context)
           o.instance_variable_set('@eager_load', @eager_load)
           @context.inject_delegators(self)
-        elsif o.respond_to?(name)
-          o =
-            if index == names.count - 1
-              o.public_send(name, *params)
-            else
-              o.public_send(name)
-            end
+        elsif o.superclass == ::APIQL::Entity
+          if o.respond_to?(name)
+            o =
+              if index == names.count - 1
+                o.public_send(name, *params)
+              else
+                o.public_send(name)
+              end
+          else
+            o = nil
+            break
+          end
         else
-          o = nil
-          break
+          objects = o
+          o = "#{o.name}::Entity".constantize
+          if o.respond_to?(name)
+            o.instance_variable_set("@objects", objects)
+            o.instance_variable_set('@context', @context)
+            o.instance_variable_set('@eager_load', @eager_load)
+            @context.inject_delegators(self)
+            o =
+              if index == names.count - 1
+                o.public_send(name, *params)
+              else
+                o.public_send(name)
+              end
+          else
+            o = nil
+            break
+          end
         end
       end
 
@@ -286,7 +306,7 @@ class APIQL
     delegate :authorize!, to: :@context
 
     class << self
-      attr_reader :apiql_attributes
+      attr_reader :apiql_attributes, :objects
       delegate :authorize!, to: :@context
 
       def inherited(child)
@@ -310,17 +330,10 @@ class APIQL
         @apiql_attributes += attrs.map(&:to_sym)
       end
 
-      def all(page = nil, page_size = 10)
+      def all
         authorize! :read, @apiql_entity_class
 
-        if page.present?
-          {
-            total: @apiql_entity_class.count,
-            items: @apiql_entity_class.eager_load(eager_load).offset(page * page_size).limit(page_size)
-          }
-        else
-          @apiql_entity_class.eager_load(eager_load).all
-        end
+        @apiql_entity_class.eager_load(eager_load).all
       end
 
       def find(id)
@@ -447,7 +460,12 @@ class APIQL
 
             break if o.nil?
           else
+            objects = o
             o = "#{o.name}::Entity".constantize
+            o.instance_variable_set("@objects", objects)
+            o.instance_variable_set('@context', @context)
+            o.instance_variable_set('@eager_load', @eager_load)
+            @context.inject_delegators(self)
 
             if o.respond_to? field
               if index == names.count - 1
