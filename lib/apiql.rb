@@ -41,7 +41,7 @@ class APIQL
 
       if request.present?
         request = compile(request)
-        redis&.set("api-ql-cache-#{request_id}", request.to_json)
+        redis&.set("api-ql-cache-#{request_id}", JSON.generate(request), ex: 31*24*60*60)
         @@cache[request_id] = request
         @@cache = {} if(@@cache.count > 1000)
       else
@@ -51,6 +51,21 @@ class APIQL
       end
 
       request
+    end
+
+    def cacheable(dependencies, attr, expires_in: 31*24*60*60)
+      dependencies = dependencies.flatten.map { |obj| [obj.class.name, obj.id] }
+      name = ['api-ql-cache', dependencies, attr].flatten.join('-')
+      begin
+        raise if expires_in <= 0
+        JSON.parse(redis&.get(name))
+      rescue
+        (block_given? ? yield : nil).tap { |data| expires_in > 0 && redis&.set(name, JSON.generate(data), ex: expires_in) }
+      end
+    end
+
+    def drop_cache(obj)
+      redis&.scan_each(match: "api-ql*-#{obj.class.name}-#{obj.id}-*").each { |key| redis.del(key) }
     end
 
     def simple_class?(value)

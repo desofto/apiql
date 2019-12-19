@@ -6,37 +6,12 @@ It compiles requests into Hashes for faster rendering.
 
 It automatically detects nested entities and eager-loads them for faster DB access!
 
-Define your responder (requested methods):
-
-```ruby
-class UserAPIQL < ::APIQL
-  def me
-    authorize! :show, ::User
-
-    current_user
-  end
-
-  def authenticate(email, password)
-    user = ::User.find_by(email)
-    user.authenticate(password)
-
-    user
-  end
-
-  def logout
-    current_user&.logout
-
-    :ok
-  end
-end
-
-```
 In controller or Grape API endpoint, handler of POST /apiql method (or any other, see below APIQL.endpoint):
 
 ```ruby
 def apiql
   schema = APIQL.cache(params)
-  UserAPIQL.new(self, :session, :current_user, :params).render(schema)
+  APIQL.new(self, :session, :current_user, :params).render(schema)
 end
 
 ```
@@ -46,17 +21,54 @@ Define presenters for your models:
 
 ```ruby
 class User < ApplicationRecord
+  after_commit { APIQL.drop_cache(self) }
+
   class Entity < ::APIQL::Entity
     attributes :full_name, :email, :token, :role, :roles # any attributes, methods or associations
 
     def token # if defined, method will be called instead of attribute
       object.token if object == current_user # directly access to current_user from context
     end
+
+    def roles
+      APIQL.cacheable([object, roles], :roles, expires_in: 3600) do
+        roles.pluck(:name).join(', ')
+      end
+    end
+
+    class << self
+      def me
+        authorize! :show, ::User
+
+        current_user
+      end
+
+      def authenticate(email, password)
+        user = ::User.find_by(email)
+        user.authenticate(password)
+
+        user
+      end
+
+      def logout
+        current_user&.logout
+
+        :ok
+      end
+    end
   end
 
   has_many :roles
 
   ...
+end
+
+class Role < ApplicationRecord
+  after_commit { APIQL.drop_cache(self) }
+
+  class Entity < ::APIQL::Entity
+    attributes :id, :name
+  end
 end
 
 ```
@@ -74,13 +86,13 @@ APIQL.endpoint = "/apiql"
 
 authenticate(email, password) {
   apiql(`
-    logout()
+    User.logout()
 
-    authenticate(email, password) {
+    User.authenticate(email, password) {
       token
     }
 
-    me {
+    User.me {
       email full_name role token
 
       roles {
@@ -98,7 +110,7 @@ authenticate(email, password) {
 
 logout() {
   apiql(`
-    logout
+    User.logout
   `)
   .then(response => {
   })
@@ -110,11 +122,11 @@ you can call methods on entities:
 
 ```javascript
   apiql(`
-    authenticate(email, password) {
+    User.authenticate(email, password) {
       token
     }
 
-    user: me.reload {
+    user: User.me.reload {
       email full_name role token
 
       roles(filter) {
@@ -218,7 +230,7 @@ CRUD methods available for all models:
 or mount methods from external modules:
 
 ```ruby
-class UserAPIQL < ::APIQL
+class APIQL < ::APIQL
   mount ::Services::User # all methouds could be called with "user" prefix like "user.logout()"
   mount ::Services::Common, as: '' # all methods could be called without prefixes
   mount ::Services::Employer, as: 'dashboard" # all methods could be called with specified prefix
