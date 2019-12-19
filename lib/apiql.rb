@@ -65,7 +65,7 @@ class APIQL
     end
 
     def drop_cache(obj)
-      redis&.scan_each(match: "api-ql*-#{obj.class.name}-#{obj.id}-*").each { |key| redis.del(key) }
+      redis && redis.scan_each(match: "api-ql*-#{obj.class.name}-#{obj.id}-*").each { |key| redis.del(key) }
     end
 
     def simple_class?(value)
@@ -104,7 +104,7 @@ class APIQL
     def redis
       @redis ||=
         begin
-          ::Redis.new(host: 'localhost')
+          ::Redis.new(host: 'localhost').tap { |redis| redis.ping }
         rescue
           nil
         end
