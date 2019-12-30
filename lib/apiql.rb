@@ -551,7 +551,7 @@ class APIQL
 
       field.split('.').each do |name|
         if o.nil?
-          o = object[name.to_sym]
+          o = object[name.to_sym] || object[name.to_s]
           break if o.nil?
         else
           if o.respond_to? name
