@@ -4,7 +4,7 @@ const APIQL = {
   CSRFToken: '',
 
   hash: function(s) {
-    let hash = 0, i, chr
+    var hash = 0, i, chr
     if(s.length === 0) return hash
     for(i = 0; i < s.length; i++) {
       chr   = s.charCodeAt(i)
@@ -16,7 +16,7 @@ const APIQL = {
 
   post: function(endpoint, data) {
     return new Promise(function(resolve, reject) {
-      let http = new XMLHttpRequest()
+      var http = new XMLHttpRequest()
       http.open("POST", endpoint, true)
       if(APIQL.CSRFToken.length > 0) {
         http.setRequestHeader("X-CSRF-Token", APIQL.CSRFToken)
