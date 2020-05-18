@@ -104,8 +104,8 @@ class APIQL
     def redis
       @redis ||=
         begin
-          ::Redis.new(host: 'localhost').tap { |redis| redis.ping }
-        rescue
+          ::Redis.new(host: 'localhost').tap(&:ping)
+        rescue StandardError
           nil
         end
     end

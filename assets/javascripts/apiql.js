@@ -2,6 +2,7 @@ const APIQL = {
   on_error: null,
   endpoint: '',
   CSRFToken: '',
+  http: null,
 
   hash: function(s) {
     var hash = 0, i, chr
@@ -23,15 +24,19 @@ const APIQL = {
       }
       http.setRequestHeader("Content-Type", "application/json;charset=UTF-8")
       http.onload = function() {
+        APIQL.http = http
+
         if(http.status >= 200 && http.status < 300) {
           resolve({
             status: http.status,
-            body: JSON.parse(http.responseText)
+            body: JSON.parse(http.responseText),
+            http: http
           })
         } else {
           reject({
             status: http.status,
-            body: JSON.parse(http.responseText)
+            body: JSON.parse(http.responseText),
+            http: http
           })
         }
       }
