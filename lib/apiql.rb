@@ -151,7 +151,7 @@ class APIQL
 
           ptr = pool.pop
         elsif pool.any?
-          if reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s*)?(?<name>[\w\.\:\!]+)(\((?<params>.*?)\))?(?<rest>.*)\z/m)
+          if reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s*)?(?<name>[\w\.\:\!\?]+)(\((?<params>.*?)\))?(?<rest>.*)\z/m)
             schema = reg[:rest]
 
             key = reg[:alias].present? ? "#{reg[:alias]}: #{reg[:name]}" : reg[:name]
@@ -163,7 +163,7 @@ class APIQL
           else
             raise Error, schema
           end
-        elsif reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s+)?(?<name>[\w\.\:\!]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\{(?<rest>.*)\z/m)
+        elsif reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s+)?(?<name>[\w\.\:\!\?]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\{(?<rest>.*)\z/m)
           schema = reg[:rest]
 
           key = "#{reg[:alias] || reg[:name]}: #{reg[:name]}(#{reg[:params]})"
@@ -171,7 +171,7 @@ class APIQL
           pool.push(ptr)
 
           ptr = push_key.call(key, true)
-        elsif reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s+)?(?<name>[\w\.\:\!]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\n?(?<rest>.*)\z/m)
+        elsif reg = schema.match(/\A\s*((?<alias>[\w\.]+):\s+)?(?<name>[\w\.\:\!\?]+)(\((?<params>((\w+)(\s*\,\s*\w+)*))?\))?\s*\n?(?<rest>.*)\z/m)
           schema = reg[:rest]
 
           key = "#{reg[:alias] || reg[:name]}: #{reg[:name]}(#{reg[:params]})"
@@ -205,7 +205,7 @@ class APIQL
     schema.each do |call|
       if call.is_a? ::Hash
         call.each do |function, sub_schema|
-          reg = function.match(/\A((?<alias>[\w\.\:\!]+):\s+)?(?<name>[\w\.\:\!]+)(\((?<params>.*?)\))?\z/)
+          reg = function.match(/\A((?<alias>[\w\.\:\!\?]+):\s+)?(?<name>[\w\.\:\!\?]+)(\((?<params>.*?)\))?\z/)
           raise Error, function unless reg.present?
 
           name = reg[:alias] || reg[:name]
@@ -233,7 +233,7 @@ class APIQL
           end
         end
       else
-        reg = call.match(/\A((?<alias>[\w\.\:\!]+):\s+)?(?<name>[\w\.\:\!]+)(\((?<params>.*?)\))?\z/)
+        reg = call.match(/\A((?<alias>[\w\.\:\!\?]+):\s+)?(?<name>[\w\.\:\!\?]+)(\((?<params>.*?)\))?\z/)
         raise Error, call unless reg.present?
 
         name = reg[:alias] || reg[:name]
@@ -421,7 +421,7 @@ class APIQL
       schema.each do |field|
         if field.is_a? Hash
           field.each do |field, sub_schema|
-            reg = field.match(/\A((?<alias>[\w\.\!]+):\s*)?(?<name>[\w\.\!]+)(\((?<params>.*?)\))?\z/)
+            reg = field.match(/\A((?<alias>[\w\.\!\?]+):\s*)?(?<name>[\w\.\!\?]+)(\((?<params>.*?)\))?\z/)
             raise Error, field unless reg.present?
 
             name = reg[:alias] || reg[:name]
@@ -435,7 +435,7 @@ class APIQL
             end
           end
         else
-          reg = field.match(/\A((?<alias>[\w\.\!]+):\s*)?(?<name>[\w\.\!]+)(\((?<params>.*?)\))?\z/)
+          reg = field.match(/\A((?<alias>[\w\.\!\?]+):\s*)?(?<name>[\w\.\!\?]+)(\((?<params>.*?)\))?\z/)
           raise Error, field unless reg.present?
 
           name = reg[:alias] || reg[:name]

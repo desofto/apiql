@@ -69,8 +69,7 @@ const APIQL = {
       APIQL.post(APIQL.endpoint, form || params)
       .then(function(response) {
         resolve(response.body)
-      })
-      .catch(function(response) {
+      }, function(response) {
         if(response.status == 401 && APIQL.on_error) {
           APIQL.on_error(response)
           return
@@ -87,8 +86,7 @@ const APIQL = {
         APIQL.post(APIQL.endpoint, form || params)
         .then(function(response) {
           resolve(response.body)
-        })
-        .catch(function(ressponse) {
+        }, function(ressponse) {
           if(APIQL.on_error) {
             APIQL.on_error(response)
           } else {
