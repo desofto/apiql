@@ -616,7 +616,7 @@ class APIQL
         begin
           "#{value.class.name}::Entity".constantize.new(value, self).render(schema)
         rescue StandardError
-          if ::Rails.env.development?
+          if ::Rails.env.development? || ::Rails.env.test?
             raise
           else
             nil
