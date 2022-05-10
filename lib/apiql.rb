@@ -2,7 +2,7 @@ class APIQL
   module Rails
     class Engine < ::Rails::Engine
       initializer 'apiql.assets' do |app|
-        app.config.assets.paths << root.join('assets', 'javascripts').to_s
+        app.config.assets.paths << root.join('assets', 'javascripts').to_s if app.config.respond_to? :assets
       end
     end
   end
@@ -41,12 +41,12 @@ class APIQL
 
       if request.present?
         request = compile(request)
-        redis&.set("api-ql-cache-#{request_id}", JSON.generate(request), ex: 31*24*60*60)
+        ::Rails.cache.write("api-ql-cache-#{request_id}", JSON.generate(request), expires_in: 31*24*60*60)
         @@cache[request_id] = request
         @@cache = {} if(@@cache.count > 1000)
       else
         request = @@cache[request_id]
-        request ||= JSON.parse(redis&.get("api-ql-cache-#{request_id}")) rescue nil
+        request ||= JSON.parse(::Rails.cache.fetch("api-ql-cache-#{request_id}")) rescue nil
         raise CacheMissed unless request.present? && request.is_a?(::Array)
       end
 
@@ -58,14 +58,15 @@ class APIQL
       name = ['api-ql-cache', dependencies, attr].flatten.join('-')
       begin
         raise if expires_in <= 0
-        JSON.parse(redis&.get(name))
+        JSON.parse(::Rails.cache.fetch(name))
       rescue
-        (block_given? ? yield : nil).tap { |data| expires_in > 0 && redis&.set(name, JSON.generate(data), ex: expires_in) }
+        (block_given? ? yield : nil).tap { |data| expires_in > 0 && ::Rails.cache.write(name, JSON.generate(data), expires_in: expires_in) }
       end
     end
 
     def drop_cache(obj)
-      redis && redis.scan_each(match: "api-ql*-#{obj.class.name}-#{obj.id}-*").each { |key| redis.del(key) }
+      return unless ::Rails.cache.respond_to? :delete_if
+      ::Rails.cache.delete_if { |k, v| k =~ /api-ql.*-#{obj.class.name}-#{obj.id}-.*/ }
     end
 
     def simple_class?(value)
@@ -100,15 +101,6 @@ class APIQL
     end
 
     private
-
-    def redis
-      @redis ||=
-        begin
-          ::Redis.new(host: 'localhost').tap(&:ping)
-        rescue StandardError
-          nil
-        end
-    end
 
     def compile(schema)
       result = []
@@ -217,7 +209,7 @@ class APIQL
           data = call_function(function, *params)
 
           if @eager_load.present? && !data.is_a?(::Hash) && !data.is_a?(::Array)
-            if data.respond_to?(:eager_load)
+            if data.respond_to?(:includes)
               data = data.includes(eager_load)
             elsif data.respond_to?(:id)
               data = data.class.includes(eager_load).find(data.id)
@@ -280,7 +272,7 @@ class APIQL
           o.instance_variable_set('@context', @context)
           o.instance_variable_set('@eager_load', @eager_load)
           @context.inject_delegators(self)
-        elsif o.superclass == ::APIQL::Entity
+        elsif o.superclass == ::APIQL::Entity || o.superclass.superclass == ::APIQL::Entity
           if o.respond_to?(name)
             o =
               if index == names.count - 1
@@ -616,11 +608,7 @@ class APIQL
         begin
           "#{value.class.name}::Entity".constantize.new(value, self).render(schema)
         rescue StandardError
-          if ::Rails.env.development? || ::Rails.env.test?
-            raise
-          else
-            nil
-          end
+          raise
         end
       end
     end

@@ -231,7 +231,7 @@ or mount methods from external modules:
 
 ```ruby
 class APIQL < ::APIQL
-  mount ::Services::User # all methouds could be called with "user" prefix like "user.logout()"
+  mount ::Services::User # all methods could be called with "user" prefix like "user.logout()"
   mount ::Services::Common, as: '' # all methods could be called without prefixes
   mount ::Services::Employer, as: 'dashboard" # all methods could be called with specified prefix
 end
