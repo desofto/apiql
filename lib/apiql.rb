@@ -260,7 +260,7 @@ class APIQL
   private
 
   def call_function(name, *params)
-    if respond_to?(name)
+    if respond_to?(name) && (methods - Object.methods).include?(name.to_sym)
       public_send(name, *params)
     else
       o = nil
@@ -273,7 +273,7 @@ class APIQL
           o.instance_variable_set('@eager_load', @eager_load)
           @context.inject_delegators(self)
         elsif o.superclass == ::APIQL::Entity || o.superclass.superclass == ::APIQL::Entity
-          if o.respond_to?(name)
+          if o.respond_to?(name) && (o.methods - Object.methods).include?(name.to_sym)
             o =
               if index == names.count - 1
                 o.public_send(name, *params)
@@ -287,7 +287,7 @@ class APIQL
         else
           objects = o
           o = "#{o.name}::Entity".constantize
-          if o.respond_to?(name)
+          if o.respond_to?(name) && (o.methods - Object.methods).include?(name.to_sym)
             o.instance_variable_set("@objects", objects)
             o.instance_variable_set('@context', @context)
             o.instance_variable_set('@eager_load', @eager_load)
@@ -313,8 +313,58 @@ class APIQL
     delegate :authorize!, to: :@context
 
     class << self
+      def all
+        authorize! :read, @apiql_entity_class
+
+        @apiql_entity_class.eager_load(eager_load).all
+      end
+
+      def find(id)
+        item = @apiql_entity_class.eager_load(eager_load).find(id)
+
+        authorize! :read, item
+
+        item
+      end
+
+      def create(params)
+        authorize! :create, @apiql_entity_class
+
+        if respond_to?(:create_params, true)
+          params = create_params(params)
+        elsif respond_to?(:params, true)
+          params = self.params(params)
+        end
+
+        @apiql_entity_class.create!(params)
+      end
+
+      def update(id, params)
+        item = @apiql_entity_class.find(id)
+
+        authorize! :update, item
+
+        if respond_to?(:update_params, true)
+          params = update_params(params)
+        elsif respond_to?(:params, true)
+          params = self.params(params)
+        end
+
+        item.update!(params)
+      end
+
+      def destroy(id)
+        item = @apiql_entity_class.find(id)
+
+        authorize! :destroy, item
+
+        item.destroy!
+      end
+
+      private
+
       attr_reader :apiql_attributes, :objects
-      delegate :authorize!, to: :@context
+      delegate :authorize!, to: :@context # , private: true
 
       def inherited(child)
         super
@@ -336,56 +386,6 @@ class APIQL
         @apiql_attributes ||= []
         @apiql_attributes += attrs.map(&:to_sym)
       end
-
-      def all
-        authorize! :read, @apiql_entity_class
-
-        @apiql_entity_class.eager_load(eager_load).all
-      end
-
-      def find(id)
-        item = @apiql_entity_class.eager_load(eager_load).find(id)
-
-        authorize! :read, item
-
-        item
-      end
-
-      def create(params)
-        authorize! :create, @apiql_entity_class
-
-        if respond_to?(:create_params, params)
-          params = create_params(params)
-        elsif respond_to?(:params, params)
-          params = self.params(params)
-        end
-
-        @apiql_entity_class.create!(params)
-      end
-
-      def update(id, params)
-        item = @apiql_entity_class.find(id)
-
-        authorize! :update, item
-
-        if respond_to?(:update_params, params)
-          params = update_params(params)
-        elsif respond_to?(:params, params)
-          params = self.params(params)
-        end
-
-        item.update!(params)
-      end
-
-      def destroy(id)
-        item = @apiql_entity_class.find(id)
-
-        authorize! :destroy, item
-
-        item.destroy!
-      end
-
-      private
 
       def eager_load
         result = @eager_load
@@ -459,7 +459,7 @@ class APIQL
           if o.nil?
             return unless field.to_sym.in? self.class.apiql_attributes
 
-            if respond_to? field
+            if respond_to?(field) && (methods - Object.methods).include?(name.to_sym)
               o = public_send(field)
             else
               o = object.public_send(field)
@@ -474,7 +474,7 @@ class APIQL
             o.instance_variable_set('@eager_load', @eager_load)
             @context.inject_delegators(self)
 
-            if o.respond_to? field
+            if o.respond_to?(field) && (o.methods - Object.methods).include?(name.to_sym)
               if index == names.count - 1
                 o = o.public_send(field, *params)
               else
@@ -489,9 +489,9 @@ class APIQL
 
         o
       else
-        return unless field.to_sym.in? self.class.apiql_attributes
+        return unless field.to_sym.in? self.class.send(:apiql_attributes)
 
-        if respond_to? field
+        if respond_to?(field) && (methods - Object.methods).include?(name.to_sym)
           public_send(field, *params)
         else
           object.public_send(field, *params)
@@ -546,7 +546,7 @@ class APIQL
           o = object[name.to_sym] || object[name.to_s]
           break if o.nil?
         else
-          if o.respond_to? name
+          if o.respond_to?(name) && (o.methods - Object.methods).include?(name.to_sym)
             o = o.public_send(name)
           else
             o = nil
