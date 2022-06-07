@@ -459,7 +459,7 @@ class APIQL
           if o.nil?
             return unless field.to_sym.in? self.class.send(:apiql_attributes)
 
-            if respond_to?(field) && (methods - Object.methods).include?(field.to_sym)
+            if respond_to?(field)
               o = public_send(field)
             else
               o = object.public_send(field)
@@ -491,7 +491,7 @@ class APIQL
       else
         return unless field.to_sym.in? self.class.send(:apiql_attributes)
 
-        if respond_to?(field) && (methods - Object.methods).include?(field.to_sym)
+        if respond_to?(field)
           public_send(field, *params)
         else
           object.public_send(field, *params)
@@ -546,7 +546,7 @@ class APIQL
           o = object[name.to_sym] || object[name.to_s]
           break if o.nil?
         else
-          if o.respond_to?(name) && (o.methods - Object.methods).include?(name.to_sym)
+          if o.respond_to?(name)
             o = o.public_send(name)
           else
             o = nil
