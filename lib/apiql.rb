@@ -457,9 +457,9 @@ class APIQL
         o = nil
         names.each_with_index do |field, index|
           if o.nil?
-            return unless field.to_sym.in? self.class.apiql_attributes
+            return unless field.to_sym.in? self.class.send(:apiql_attributes)
 
-            if respond_to?(field) && (methods - Object.methods).include?(name.to_sym)
+            if respond_to?(field) && (methods - Object.methods).include?(field.to_sym)
               o = public_send(field)
             else
               o = object.public_send(field)
@@ -474,7 +474,7 @@ class APIQL
             o.instance_variable_set('@eager_load', @eager_load)
             @context.inject_delegators(self)
 
-            if o.respond_to?(field) && (o.methods - Object.methods).include?(name.to_sym)
+            if o.respond_to?(field) && (o.methods - Object.methods).include?(field.to_sym)
               if index == names.count - 1
                 o = o.public_send(field, *params)
               else
@@ -491,7 +491,7 @@ class APIQL
       else
         return unless field.to_sym.in? self.class.send(:apiql_attributes)
 
-        if respond_to?(field) && (methods - Object.methods).include?(name.to_sym)
+        if respond_to?(field) && (methods - Object.methods).include?(field.to_sym)
           public_send(field, *params)
         else
           object.public_send(field, *params)
